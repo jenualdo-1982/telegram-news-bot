@@ -1,7 +1,7 @@
 import os
 
 # Токен бота (получить у @BotFather)
-BOT_TOKEN = "TOKEN"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Список рубрик с их callback_data и эмодзи
 RUBRICS = [
