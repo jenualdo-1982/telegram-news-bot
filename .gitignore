@@ -11,7 +11,7 @@ venv/
 *.db-journal
 
 # Config
-config.py
+
 *.log
 
 # IDE
