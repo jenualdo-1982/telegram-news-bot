@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from config import RUBRICS
-from database import save_news_cache
+from database import save_news_cache, get_news_cache 
 
 def fetch_rss_news(rubric_callback, rss_url, limit=3):
     """Получает последние новости из RSS-ленты"""
@@ -38,14 +38,33 @@ def fetch_all_news():
     
     print(f"[{datetime.now()}] Обновление завершено")
 
-def get_news_for_rubrics(rubrics):
-    """Собирает новости для списка рубрик"""
+def get_news_for_rubrics(rubrics, fresh=False):
+    """
+    Собирает новости для списка рубрик
+    
+    Параметры:
+        rubrics (list): список callback'ов рубрик (['world', 'tech'])
+        fresh (bool): если True - загружает свежие из RSS, если False - из кэша
+    
+    Возвращает:
+        list: список словарей с рубриками и новостями
+    """
     result = []
     
     for rubric_callback in rubrics:
-        news = get_news_cache(rubric_callback)
+        if fresh:
+            # Загружаем свежие новости из RSS
+            rubric_data = next((r for r in RUBRICS if r["callback"] == rubric_callback), None)
+            if rubric_data:
+                news = fetch_rss_news(rubric_callback, rubric_data['rss'])
+            else:
+                news = []
+        else:
+            # Берём из кэша
+            news = get_news_cache(rubric_callback)
+        
         if news:
-            # Находим название рубрики
+            # Находим название рубрики (с эмодзи)
             rubric_name = next((r["name"] for r in RUBRICS if r["callback"] == rubric_callback), rubric_callback)
             result.append({
                 'rubric': rubric_name,

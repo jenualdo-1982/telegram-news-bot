@@ -1,8 +1,18 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from database import save_user, update_user_rubrics, unsubscribe_user
-from keyboards import get_rubrics_keyboard, get_unsubscribe_keyboard, get_confirmation_keyboard
+from datetime import datetime
+import json
+
+from database import get_user, save_user, unsubscribe_user
+from keyboards import (
+    get_rubrics_keyboard, 
+    get_unsubscribe_keyboard, 
+    get_confirmation_keyboard,
+    get_back_to_menu_keyboard
+)
 from config import MAX_RUBRICS, RUBRICS
+from rss_parser import get_news_for_rubrics
+
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик всех callback-запросов (нажатий на кнопки)"""
@@ -17,7 +27,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if 'selected_rubrics' not in context.user_data:
         context.user_data['selected_rubrics'] = []
     
-    # Выбор рубрики
+    # --- ВЫБОР РУБРИКИ ---
     if callback_data.startswith('rubric_'):
         rubric_key = callback_data.replace('rubric_', '')
         
@@ -51,7 +61,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_rubrics_keyboard(context.user_data['selected_rubrics'])
             )
     
-    # Завершение выбора
+    # --- ЗАВЕРШЕНИЕ ВЫБОРА ---
     elif callback_data == 'finish_selection':
         selected = context.user_data.get('selected_rubrics', [])
         
@@ -83,21 +93,89 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_confirmation_keyboard()
         )
     
-    # Отмена выбора
-    elif callback_data == 'cancel_selection':
-        context.user_data['selected_rubrics'] = []
+    # --- ПОЛУЧИТЬ НОВОСТИ СЕЙЧАС ---
+    elif callback_data == 'get_news_now':
+        # Получаем рубрики пользователя из базы
+        user_data = get_user(user.id)
+        if not user_data:
+            await query.edit_message_text(
+                "❌ Сначала выберите рубрики через /start"
+            )
+            return
+        
+        # Парсим рубрики из базы
+        rubrics = json.loads(user_data[3]) if user_data[3] else []  # rubrics в 4-й колонке
+        
+        if not rubrics:
+            await query.edit_message_text(
+                "❌ У вас нет выбранных рубрик. Нажмите /start чтобы выбрать."
+            )
+            return
+        
+        # Отправляем сообщение о начале загрузки
         await query.edit_message_text(
-            "❌ Выбор отменён. Чтобы начать заново, отправьте /start"
+            "📰 Загружаю свежие новости... Это займёт несколько секунд."
+        )
+        
+        # Собираем свежие новости (fresh=True)
+        news_data = get_news_for_rubrics(rubrics, fresh=True)
+        
+        if not news_data:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="❌ Не удалось загрузить новости. Попробуйте позже."
+            )
+            return
+        
+        # Формируем дайджест
+        digest = f"📰 *Свежие новости на {datetime.now().strftime('%d.%m.%Y %H:%M')}*\n\n"
+        
+        for rubric_data in news_data:
+            digest += f"*{rubric_data['rubric']}*\n"
+            for i, item in enumerate(rubric_data['news'], 1):
+                digest += f"{i}. [{item['title']}]({item['link']})\n"
+            digest += "\n"
+        
+        digest += "\n✨ Чтобы обновить, нажмите кнопку ниже"
+        
+        # Отправляем дайджест
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=digest,
+            parse_mode='Markdown',
+            disable_web_page_preview=False,
+            reply_markup=get_back_to_menu_keyboard()
         )
     
-    # Начало процесса отписки
+    # --- ТОЛЬКО ЕЖЕДНЕВНАЯ РАССЫЛКА ---
+    elif callback_data == 'daily_only':
+        await query.edit_message_text(
+            "✅ Отлично! Теперь вы будете получать дайджест ежедневно в 8:00 МСК.\n\n"
+            "Чтобы получить новости прямо сейчас, нажмите /start и выберите 'Получить новости сейчас'."
+        )
+    
+    # --- ВОЗВРАТ В ГЛАВНОЕ МЕНЮ ---
+    elif callback_data == 'back_to_menu':
+        # Получаем рубрики пользователя из базы
+        user_data = get_user(user.id)
+        if user_data and user_data[3]:  # если есть рубрики
+            await query.edit_message_text(
+                "🏠 Главное меню",
+                reply_markup=get_confirmation_keyboard()
+            )
+        else:
+            await query.edit_message_text(
+                "🏠 Главное меню\n\nЧтобы выбрать рубрики, отправьте /start"
+            )
+    
+    # --- НАЧАЛО ПРОЦЕССА ОТПИСКИ ---
     elif callback_data == 'start_unsubscribe':
         await query.edit_message_text(
             "Вы уверены, что хотите отписаться от рассылки?",
             reply_markup=get_unsubscribe_keyboard()
         )
     
-    # Подтверждение отписки
+    # --- ПОДТВЕРЖДЕНИЕ ОТПИСКИ ---
     elif callback_data == 'confirm_unsubscribe':
         unsubscribe_user(user.id)
         context.user_data['selected_rubrics'] = []
@@ -106,13 +184,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Чтобы подписаться снова, отправьте /start"
         )
     
-    # Получить новости сейчас
-    elif callback_data == 'get_news_now':
+    # --- ОТМЕНА ВЫБОРА ---
+    elif callback_data == 'cancel_selection':
+        context.user_data['selected_rubrics'] = []
         await query.edit_message_text(
-            "📰 Функция получения новостей сейчас будет добавлена в следующей версии.\n"
-            "Пока что новости приходят автоматически в 8:00."
+            "❌ Выбор отменён. Чтобы начать заново, отправьте /start"
         )
     
-    # Неизвестный callback
+    # --- НЕИЗВЕСТНЫЙ CALLBACK ---
     else:
         await query.edit_message_text("❌ Неизвестная команда")

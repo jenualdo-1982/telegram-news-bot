@@ -46,6 +46,15 @@ def get_confirmation_keyboard():
     """Клавиатура после завершения выбора"""
     keyboard = [
         [InlineKeyboardButton("📰 Получить новости сейчас", callback_data="get_news_now")],
+        [InlineKeyboardButton("⏰ Будут приходить в 8:00", callback_data="daily_only")],
         [InlineKeyboardButton("❌ Отписаться от рассылки", callback_data="start_unsubscribe")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_back_to_menu_keyboard():
+    """Клавиатура для возврата в главное меню"""
+    keyboard = [
+        [InlineKeyboardButton("🔙 В главное меню", callback_data="back_to_menu")],
+        [InlineKeyboardButton("📰 Обновить новости", callback_data="get_news_now")]
     ]
     return InlineKeyboardMarkup(keyboard)
