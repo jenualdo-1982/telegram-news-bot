@@ -21,7 +21,7 @@ def setup_scheduler():
     # Обновление RSS каждые 6 часов
     scheduler.add_job(
         scheduled_news_update,
-        trigger=CronTrigger(hour='*/6', minute=5),
+        trigger=CronTrigger(hour='*', minute=5),
         id='news_update'
     )
     
