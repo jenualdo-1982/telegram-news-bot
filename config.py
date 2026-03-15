@@ -51,7 +51,6 @@ RUBRICS = [
     {"name": "🌐 Крипто (Bits)", "callback": "crypto", "rss": "https://bits.media/rss/"},
     {"name": "🌐 Крипто (ForkLog)", "callback": "forklog", "rss": "https://forklog.com/feed"},
 ]
-]
 
 # Максимальное количество выбираемых рубрик
 MAX_RUBRICS = 5
